@@ -45,7 +45,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 int set_nonblock(int fd);
 int write_all(int fd,char *s,int len);
 
+#define ARM_COMMAND "../pynx584/nx584_client --master 0316 arm"
+#define DISARM_COMMAND "../pynx584/nx584_client --master 0316 disarm"
+
 #define MAX_INPUTS 16
+char *input_files[MAX_INPUTS];
 int inputs[MAX_INPUTS];
 #define IT_UNKNOWN 0
 #define IT_CELLMODEM 1
@@ -235,6 +239,13 @@ int parse_line(char *filename,int fd,char *line)
       break;
     }
 
+    // Ignore all other lines from the NX584 server log
+    f=sscanf(line,"%d-%d-%d %d:%d:%d",&year,&month,&day,&hour,&min,&msec);
+    if (f==6) {
+      retVal=IT_NX584SERVERLOG;
+      break;
+    }
+    
     // Check if it is a recognised command typed directly in as input
     // (e.g., from stdin).  If so, treat this input as text command interface,
     // and echo output directly back.
@@ -286,6 +297,7 @@ int main(int argc,char **argv)
 	retVal=-1;
 	break;
       }
+      input_files[input_count]=argv[i];
       input_types[input_count]=IT_UNKNOWN;
       inputs[input_count++]=fd;
     }
@@ -310,8 +322,8 @@ int main(int argc,char **argv)
 	  events++;
 	  if ((buffers[i][buffer_lens[i]]=='\n')||(buffers[i][buffer_lens[i]]=='\r')) {
 	    buffers[i][buffer_lens[i]]=0;
-	    LOG_NOTE("Have line of input from '%s': %s",argv[i+1],buffers[i]);
-	    input_types[i]=parse_line(argv[i+1],inputs[i],buffers[i]);
+	    LOG_NOTE("Have line of input from '%s': %s",input_files[i],buffers[i]);
+	    input_types[i]=parse_line(input_files[i],inputs[i],buffers[i]);
 	    buffers[i][0]=0;
 	    buffer_lens[i]=0;
 	  } else	  
