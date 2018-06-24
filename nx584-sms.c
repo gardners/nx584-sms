@@ -41,6 +41,26 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <strings.h>
 #include "code_instrumentation.h"
 
+#define MAX_INPUTS 16
+int inputs[MAX_INPUTS];
+#define IT_UNKNOWN 0
+#define IT_CELLMODEM 1
+#define IT_NX584SERVERLOG 2
+#define IT_TEXTCOMMANDS 3
+int input_types[MAX_INPUTS];
+int input_count=0;
+// Buffers for lines of input being read
+#define BUFFER_SIZE 8192
+char buffers[MAX_INPUTS][BUFFER_SIZE];
+int buffer_lens[MAX_INPUTS];
+
+int armedP=-1;
+#define MAX_ZONES 64
+#define ZS_UNKNOWN 0
+#define ZS_NORMAL 1
+#define ZS_FAULT 2
+int zoneStates[MAX_ZONES];
+
 int open_input(char *in)
 {
   int retVal=-1;
@@ -110,6 +130,104 @@ int open_input(char *in)
   return retVal;
 }
 
+int parse_line(char *filename,int fd,char *line)
+{
+  int retVal=IT_UNKNOWN;
+  LOG_ENTRY;
+
+  int year,month,day,hour,min,sec,msec,zoneNum;
+  char zone_state[8192];
+  
+  do {
+
+    // Allow either , or . as decimal character
+    int f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Zone %d (%*[^)]) state is %s",
+		 &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
+    if (f<9)
+      f=sscanf(line,"%d-%d-%d %d:%d:%d.%d controller INFO Zone %d (%*[^)]) state is %s",
+	       &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
+      
+    if (f==9) {
+      LOG_NOTE("Saw controller state message: Zone %d is now '%s'",zoneNum,zone_state);
+      if (zoneNum>=0&&zoneNum<MAX_ZONES) {
+	if (!strcmp("FAULT",zone_state)) {
+	  zoneStates[zoneNum]=ZS_FAULT;
+	} else if (!strcmp("NORMAL",zone_state)) {
+	  zoneStates[zoneNum]=ZS_NORMAL;
+	} else {
+	  LOG_NOTE("I don't recognise zone state '%s'",zone_state);
+	  zoneStates[zoneNum]=ZS_UNKNOWN;
+	}
+      }
+      retVal=IT_NX584SERVERLOG;
+      break;
+    }
+
+    if (!strcmp(line,"help")) {
+      fprintf(stderr,"Valid commands:\n"
+	      "    arm - arm alarm\n"
+	      " disarm - disarm alarm\n"
+	      " armed? - indicate if alarm armed or not\n"
+	      " status - list faulted zones, and if alarm is armed\n"
+	      );
+      retVal=IT_TEXTCOMMANDS;
+      break;
+    }
+    if (!strcmp(line,"status")) {
+      char out[8192];
+      int out_len=0;
+      switch (armedP) {
+      case 0:
+	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed.\n");
+      case 1:
+	snprintf(&out[out_len],8192-out_len,"Alarm IS armed.\n");
+      default:
+	snprintf(&out[out_len],8192-out_len,"Alarm state unknown.\n");
+      }
+      out_len=strlen(out);
+      // XXX - Work out how many zones we have
+      int faults=0;
+      int faultZone=-1;
+      for(int i=0;i<MAX_ZONES;i++)
+	{
+	  if (zoneStates[i]==ZS_FAULT) { faults++; faultZone=i; }	  
+	}
+      if (!faults) {
+	snprintf(&out[out_len],8192-out_len,"No zones have faults.\n"); out_len=strlen(out);
+      } else if (faults==1) {
+	
+	snprintf(&out[out_len],8192-out_len,"Zone FAULT in zone #%d\n",faultZone);
+	out_len=strlen(out);	
+      } else {
+	snprintf(&out[out_len],8192-out_len,"The following zones have faults: ");
+	out_len=strlen(out);
+	for(int i=0;i<MAX_ZONES;i++)
+	  {
+	    if (zoneStates[i]==ZS_FAULT) {
+	      snprintf(&out[out_len],8192-out_len," #%d",i);
+	      out_len=strlen(out);
+	    }
+	    
+	  }
+	snprintf(&out[out_len],8192-out_len,"\n");
+	out_len=strlen(out);	
+      }      
+      
+      write_all(fd,out,out_len);
+      retVal=IT_TEXTCOMMANDS;
+      break;
+    }
+    
+    LOG_NOTE("Unrecognised input string '%s'",line);
+    retVal=IT_UNKNOWN;
+    break;
+    
+  } while(0);
+
+  LOG_EXIT;
+  return retVal;
+}
+
 int main(int argc,char **argv)
 {
   /* We have one or more files/devices to open.
@@ -127,20 +245,9 @@ int main(int argc,char **argv)
   LOG_ENTRY;
 
   do {
+
+    for(int i=0;i<MAX_ZONES;i++) zoneStates[i]=ZS_UNKNOWN;
   
-#define MAX_INPUTS 16
-    int inputs[MAX_INPUTS];
-#define IT_UNKNOWN 0
-#define IT_CELLMODEM 1
-#define IT_NX584SERVERLOG 2
-#define IT_TEXTCOMMANDS 3
-    int input_types[MAX_INPUTS];
-    int input_count=0;
-    // Buffers for lines of input being read
-#define BUFFER_SIZE 8192
-    char buffers[MAX_INPUTS][BUFFER_SIZE];
-    int buffer_lens[MAX_INPUTS];
-    
     for(int i=1;i<argc;i++) {
       if (input_count>=MAX_INPUTS) {
 	LOG_ERROR("Too many input devices specified");
@@ -168,13 +275,24 @@ int main(int argc,char **argv)
     
     while (1) {
       // Read from each input type in turn
+      int events=0;
       for (int i=0;i<input_count;i++) {
-	int r=read(inputs[i],&buffers[i][buffer_lens[i]],BUFFER_SIZE-buffer_lens[i]);
+	int r=0;
+	if (buffer_lens[i]<(BUFFER_SIZE-1))
+	  r=read(inputs[i],&buffers[i][buffer_lens[i]],1);
 	if (r>0) {
-	  LOG_NOTE("Read %d bytes from '%s'",r,argv[i+1]);
+	  events++;
+	  if ((buffers[i][buffer_lens[i]]=='\n')||(buffers[i][buffer_lens[i]]=='\r')) {
+	    buffers[i][buffer_lens[i]]=0;
+	    LOG_NOTE("Have line of input from '%s': %s",argv[i+1],buffers[i]);
+	    input_types[i]=parse_line(argv[i+1],inputs[i],buffers[i]);
+	    buffers[i][0]=0;
+	    buffer_lens[i]=0;
+	  } else	  
+	    buffer_lens[i]+=r;
 	}
        }
-      usleep(50000);
+      if (!events) usleep(10000);
     }
     
   } while(0);
