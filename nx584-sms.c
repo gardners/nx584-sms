@@ -1,33 +1,33 @@
 /*
 
-NX584 modem interface to SMS controller  
-(C) Copyright Paul Gardner-Stephen 2018
+  NX584 modem interface to SMS controller  
+  (C) Copyright Paul Gardner-Stephen 2018
 
-The idea of this software is to monitor an alarm and SMS interface,
-so that a registered group of users can be notified if the alarm goes
-off, and also so that they can arm and disarm it via their phones, as
-well as enquire the current state.
+  The idea of this software is to monitor an alarm and SMS interface,
+  so that a registered group of users can be notified if the alarm goes
+  off, and also so that they can arm and disarm it via their phones, as
+  well as enquire the current state.
 
-For now, it will listen to the cellular modem SMS interface for commands,
-and periodically run the nx584_client command to find out the state of
-the alarm.  It might also end up monitoring the output of nx584_server as
-a more synchonous means of monitoring the alarm, and getting more status 
-changes.
+  For now, it will listen to the cellular modem SMS interface for commands,
+  and periodically run the nx584_client command to find out the state of
+  the alarm.  It might also end up monitoring the output of nx584_server as
+  a more synchonous means of monitoring the alarm, and getting more status 
+  changes.
 
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+  This program is free software; you can redistribute it and/or
+  modify it under the terms of the GNU General Public License
+  as published by the Free Software Foundation; either version 2
+  of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 */
@@ -39,14 +39,18 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <fcntl.h>
 #include <string.h>
 #include <strings.h>
+#include <stdlib.h>
 #include "code_instrumentation.h"
 
 
 int set_nonblock(int fd);
 int write_all(int fd,char *s,int len);
 
-#define ARM_COMMAND "../pynx584/nx584_client --master 0316 arm"
-#define DISARM_COMMAND "../pynx584/nx584_client --master 0316 disarm"
+char master_pin[1024]="9999";
+char nx584_client[1024]="../pynx584/nx584_client";
+
+#define ARM_COMMAND "%s --master %s arm"
+#define DISARM_COMMAND "%s --master %s disarm"
 
 #define MAX_INPUTS 16
 char *input_files[MAX_INPUTS];
@@ -149,11 +153,31 @@ int parse_textcommand(int fd,char *line,char *out)
     
     if (!strcmp(line,"help")) {
       snprintf(out,8192,"Valid commands:\n"
-	      "    arm - arm alarm\n"
-	      " disarm - disarm alarm\n"
-	      " armed? - indicate if alarm armed or not\n"
-	      " status - list faulted zones, and if alarm is armed\n"
-	      );
+	       "    arm - arm alarm\n"
+	       " disarm - disarm alarm\n"
+	       " armed? - indicate if alarm armed or not\n"
+	       " status - list faulted zones, and if alarm is armed\n"
+	       );
+      retVal=0;
+      break;
+    }
+    if (!strcmp(line,"disarm")) {
+      char cmd[1024];
+      snprintf(cmd,1024,DISARM_COMMAND,nx584_client,master_pin);
+      LOG_NOTE("Executing '%s'",cmd);
+      int r=system(cmd);
+      if (!r) snprintf(out,8192,"Commanded alarm to DISARM.");
+      else snprintf(out,8192,"Error #%d requesting alarm to disarm",r);
+      retVal=0;
+      break;
+    }
+    if (!strcmp(line,"arm")) {
+      char cmd[1024];
+      snprintf(cmd,1024,ARM_COMMAND,nx584_client,master_pin);
+      LOG_NOTE("Executing '%s'",cmd);
+      int r=system(cmd);
+      if (!r) snprintf(out,8192,"Commanded alarm to ARM.");
+      else snprintf(out,8192,"Error #%d requesting alarm to arm",r);
       retVal=0;
       break;
     }
@@ -291,6 +315,13 @@ int main(int argc,char **argv)
 	retVal=-1;
 	break;
       }
+
+      // Allow nx584_client and master pins to be configured
+      int f=sscanf(argv[i],"nx584_client=%s",&nx584_client);
+      if (f==1) continue;
+      f=sscanf(argv[i],"master=%s",&master_pin);
+      if (f==1) continue;            
+      
       int fd=open_input(argv[i]);
       if (fd==-1) {
 	LOG_ERROR("Could not setup input device '%s'",argv[i]);
