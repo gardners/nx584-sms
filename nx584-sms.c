@@ -41,6 +41,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <strings.h>
 #include "code_instrumentation.h"
 
+
+int set_nonblock(int fd);
+int write_all(int fd,char *s,int len);
+
 #define MAX_INPUTS 16
 int inputs[MAX_INPUTS];
 #define IT_UNKNOWN 0
@@ -130,55 +134,29 @@ int open_input(char *in)
   return retVal;
 }
 
-int parse_line(char *filename,int fd,char *line)
+int parse_textcommand(int fd,char *line,char *out)
 {
-  int retVal=IT_UNKNOWN;
+  int retVal=-1;
   LOG_ENTRY;
 
-  int year,month,day,hour,min,sec,msec,zoneNum;
-  char zone_state[8192];
-  
   do {
 
-    // Allow either , or . as decimal character
-    int f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Zone %d (%*[^)]) state is %s",
-		 &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
-    if (f<9)
-      f=sscanf(line,"%d-%d-%d %d:%d:%d.%d controller INFO Zone %d (%*[^)]) state is %s",
-	       &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
-      
-    if (f==9) {
-      LOG_NOTE("Saw controller state message: Zone %d is now '%s'",zoneNum,zone_state);
-      if (zoneNum>=0&&zoneNum<MAX_ZONES) {
-	if (!strcmp("FAULT",zone_state)) {
-	  zoneStates[zoneNum]=ZS_FAULT;
-	} else if (!strcmp("NORMAL",zone_state)) {
-	  zoneStates[zoneNum]=ZS_NORMAL;
-	} else {
-	  LOG_NOTE("I don't recognise zone state '%s'",zone_state);
-	  zoneStates[zoneNum]=ZS_UNKNOWN;
-	}
-      }
-      retVal=IT_NX584SERVERLOG;
-      break;
-    }
-
+    int out_len=0;
+    
     if (!strcmp(line,"help")) {
-      fprintf(stderr,"Valid commands:\n"
+      snprintf(out,8192,"Valid commands:\n"
 	      "    arm - arm alarm\n"
 	      " disarm - disarm alarm\n"
 	      " armed? - indicate if alarm armed or not\n"
 	      " status - list faulted zones, and if alarm is armed\n"
 	      );
-      retVal=IT_TEXTCOMMANDS;
+      retVal=0;
       break;
     }
     if (!strcmp(line,"status")) {
-      char out[8192];
-      int out_len=0;
       switch (armedP) {
       case 0:
-	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed.\n");
+	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed (arm or disarm to be sure).\n");
       case 1:
 	snprintf(&out[out_len],8192-out_len,"Alarm IS armed.\n");
       default:
@@ -213,7 +191,55 @@ int parse_line(char *filename,int fd,char *line)
 	out_len=strlen(out);	
       }      
       
-      write_all(fd,out,out_len);
+      retVal=0;
+      break;
+    }
+  } while (0);
+
+  LOG_EXIT;
+  return retVal;
+}
+
+int parse_line(char *filename,int fd,char *line)
+{
+  int retVal=IT_UNKNOWN;
+  LOG_ENTRY;
+
+  int year,month,day,hour,min,sec,msec,zoneNum;
+  char zone_state[8192];
+
+  char out[8192];
+    
+  do {
+
+    // Allow either , or . as decimal character
+    int f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Zone %d (%*[^)]) state is %s",
+		 &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
+    if (f<9)
+      f=sscanf(line,"%d-%d-%d %d:%d:%d.%d controller INFO Zone %d (%*[^)]) state is %s",
+	       &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
+      
+    if (f==9) {
+      LOG_NOTE("Saw controller state message: Zone %d is now '%s'",zoneNum,zone_state);
+      if (zoneNum>=0&&zoneNum<MAX_ZONES) {
+	if (!strcmp("FAULT",zone_state)) {
+	  zoneStates[zoneNum]=ZS_FAULT;
+	} else if (!strcmp("NORMAL",zone_state)) {
+	  zoneStates[zoneNum]=ZS_NORMAL;
+	} else {
+	  LOG_NOTE("I don't recognise zone state '%s'",zone_state);
+	  zoneStates[zoneNum]=ZS_UNKNOWN;
+	}
+      }
+      retVal=IT_NX584SERVERLOG;
+      break;
+    }
+
+    // Check if it is a recognised command typed directly in as input
+    // (e.g., from stdin).  If so, treat this input as text command interface,
+    // and echo output directly back.
+    if (!parse_textcommand(fd,line,out)) {
+      write_all(fd,out,strlen(out));
       retVal=IT_TEXTCOMMANDS;
       break;
     }
@@ -223,7 +249,7 @@ int parse_line(char *filename,int fd,char *line)
     break;
     
   } while(0);
-
+  
   LOG_EXIT;
   return retVal;
 }
