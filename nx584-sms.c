@@ -263,6 +263,24 @@ int parse_line(char *filename,int fd,char *line)
       break;
     }
 
+    int partNum=0;
+    char part_state[1024];
+    
+    f=sscanf(line,"%d-%d-%d %d:%d:%d.%d controller INFO Partition %d  %s",
+	     &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
+    if (f<9) f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Partition %d  %s",
+		      &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
+    if (f==9) {
+      if (partNum==1&&(!strcmp(part_state,"armed"))) {
+	armedP=1;
+      } else if (partNum==1&&(!strcmp(part_state,"disarmed"))) {
+	armedP=0; 
+      } else
+	LOG_NOTE("Couldn't work out the partition state message");
+      retVal=IT_NX584SERVERLOG;
+      break;
+    }
+    
     // Ignore all other lines from the NX584 server log
     f=sscanf(line,"%d-%d-%d %d:%d:%d",&year,&month,&day,&hour,&min,&msec);
     if (f==6) {
