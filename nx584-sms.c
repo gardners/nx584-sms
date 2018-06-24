@@ -275,6 +275,7 @@ int parse_line(char *filename,int fd,char *line)
     // and echo output directly back.
     if (!parse_textcommand(fd,line,out)) {
       write_all(fd,out,strlen(out));
+      write_all(fd,"\r\n",2);
       retVal=IT_TEXTCOMMANDS;
       break;
     }
