@@ -284,7 +284,6 @@ int parse_line(char *filename,int fd,char *line)
 	     &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
     if (f<9) f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Partition %d%*[ ]%[^\n\r]",
 		      &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
-    LOG_NOTE("f=%d, part_state='%s'",f,part_state);
     if (f==9) {
       if (partNum==1&&(!strcmp(part_state,"armed"))) {
 	armedP=1;
