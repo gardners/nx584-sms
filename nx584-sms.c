@@ -66,6 +66,7 @@ int input_count=0;
 char buffers[MAX_INPUTS][BUFFER_SIZE];
 int buffer_lens[MAX_INPUTS];
 
+int siren=-1;
 int armedP=-1;
 #define MAX_ZONES 64
 #define ZS_UNKNOWN 0
@@ -184,11 +185,24 @@ int parse_textcommand(int fd,char *line,char *out)
     if (!strcmp(line,"status")) {
       switch (armedP) {
       case 0:
-	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed (arm or disarm to be sure).\n");
+	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed\n");
+	break;
       case 1:
 	snprintf(&out[out_len],8192-out_len,"Alarm IS armed.\n");
+	break;
       default:
-	snprintf(&out[out_len],8192-out_len,"Alarm state unknown.\n");
+	snprintf(&out[out_len],8192-out_len,"Alarm state unknown (arm or disarm to be sure).\n");
+      }
+      out_len=strlen(out);
+      switch (siren) {
+      case 1:
+	snprintf(&out[out_len],8192-out_len,"Siren IS sounding.\n");
+	break;
+      case 0:
+	snprintf(&out[out_len],8192-out_len,"Siren is OFF.\n");
+	break;
+      default:
+	snprintf(&out[out_len],8192-out_len,"I don't know if the siren is on or off.\n");
       }
       out_len=strlen(out);
       // XXX - Work out how many zones we have
@@ -266,20 +280,36 @@ int parse_line(char *filename,int fd,char *line)
     int partNum=0;
     char part_state[1024];
     
-    f=sscanf(line,"%d-%d-%d %d:%d:%d.%d controller INFO Partition %d  %s",
+    f=sscanf(line,"%d-%d-%d %d:%d:%d.%d controller INFO Partition %d%*[ ]%[^\n\r]",
 	     &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
-    if (f<9) f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Partition %d  %s",
+    if (f<9) f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Partition %d%*[ ]%[^\n\r]",
 		      &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
+    LOG_NOTE("f=%d, part_state='%s'",f,part_state);
     if (f==9) {
       if (partNum==1&&(!strcmp(part_state,"armed"))) {
 	armedP=1;
-      } else if (partNum==1&&(!strcmp(part_state,"disarmed"))) {
+	LOG_NOTE("System is armed");
+      } else if (partNum==1&&(!strcmp(part_state,"not armed"))) {
 	armedP=0; 
+	LOG_NOTE("System is not armed");
       } else
 	LOG_NOTE("Couldn't work out the partition state message");
       retVal=IT_NX584SERVERLOG;
       break;
     }
+
+    if (strstr(line,"controller INFO System de-asserts Global Siren on"))
+      {
+	siren=0;
+	retVal=IT_NX584SERVERLOG;
+	break;
+      }
+    if (strstr(line,"controller INFO System asserts Global Siren on"))
+      {
+	siren=1;
+	retVal=IT_NX584SERVERLOG;
+	break;
+      }
     
     // Ignore all other lines from the NX584 server log
     f=sscanf(line,"%d-%d-%d %d:%d:%d",&year,&month,&day,&hour,&min,&msec);
