@@ -37,6 +37,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
+#include <strings.h>
 #include "code_instrumentation.h"
 
 int open_input(char *in)
@@ -45,8 +47,22 @@ int open_input(char *in)
   LOG_ENTRY;
 
   do {
+
+    if ((!strcmp(in,"stdin"))||(!strcmp(in,"-"))) {
+      LOG_NOTE("Registering stdin as input stream");      
+      retVal=fileno(stdin);
+      set_nonblock(retVal);
+      break;
+    }
+    
     struct stat st;
     int r=stat(in,&st);
+    if (r) {
+      perror("stat()");
+      LOG_ERROR("stat('%s') failed",in);
+      retVal=-1;
+      break;
+    }
     if (st.st_mode&S_IFREG) {
       LOG_NOTE("'%s' is a regular file",in);
       // Probably a log file, open for input, and seek to the end
@@ -77,6 +93,10 @@ int open_input(char *in)
 	retVal=-1;
 	break;
       }
+      // We think it is a serial port, so send ATI to see if it is a cellular modem
+      // (we will read the response later)
+      write(fd,"ATI\r\n",5);
+      
       retVal=fd;
       break;
     } else {
@@ -110,7 +130,16 @@ int main(int argc,char **argv)
   
 #define MAX_INPUTS 16
     int inputs[MAX_INPUTS];
+#define IT_UNKNOWN 0
+#define IT_CELLMODEM 1
+#define IT_NX584SERVERLOG 2
+#define IT_TEXTCOMMANDS 3
+    int input_types[MAX_INPUTS];
     int input_count=0;
+    // Buffers for lines of input being read
+#define BUFFER_SIZE 8192
+    char buffers[MAX_INPUTS][BUFFER_SIZE];
+    int buffer_lens[MAX_INPUTS];
     
     for(int i=1;i<argc;i++) {
       if (input_count>=MAX_INPUTS) {
@@ -124,11 +153,29 @@ int main(int argc,char **argv)
 	retVal=-1;
 	break;
       }
+      input_types[input_count]=IT_UNKNOWN;
       inputs[input_count++]=fd;
     }
     if (retVal) break;
 
     LOG_NOTE("%d input streams setup.",input_count);
+
+    fprintf(stderr,
+	    "NX584 SMS gateway running.\n"
+	    "\n"
+	    "If you specified stdin on the command line, you can type commands interactively.\n"
+	    );
+    
+    while (1) {
+      // Read from each input type in turn
+      for (int i=0;i<input_count;i++) {
+	int r=read(inputs[i],&buffers[i][buffer_lens[i]],BUFFER_SIZE-buffer_lens[i]);
+	if (r>0) {
+	  LOG_NOTE("Read %d bytes from '%s'",r,argv[i+1]);
+	}
+       }
+      usleep(50000);
+    }
     
   } while(0);
   
