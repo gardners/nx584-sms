@@ -41,7 +41,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 int open_input(char *in)
 {
-  int retVal=0;
+  int retVal=-1;
   LOG_ENTRY;
 
   do {
@@ -66,10 +66,23 @@ int open_input(char *in)
 	break;
       } else
 	LOG_NOTE("Seeked to offset %lld of '%s'",(long long)r,in);
-      
-    }
-    if (st.st_mode&S_IFCHR) {
+      retVal=fd;
+      break;
+    } else if (st.st_mode&S_IFCHR) {
       LOG_NOTE("'%s' is a character device",in);
+      int fd=open(in,O_NONBLOCK,O_RDWR);
+      if (fd==-1) {
+	perror("open");
+	LOG_ERROR("Could not open '%s' for read and write",in);
+	retVal=-1;
+	break;
+      }
+      retVal=fd;
+      break;
+    } else {
+      LOG_ERROR("Input file '%s' is neither regular file nor character device.",in);
+      retVal=-1;
+      break;
     }
   } while(0);
 
@@ -115,6 +128,8 @@ int main(int argc,char **argv)
     }
     if (retVal) break;
 
+    LOG_NOTE("%d input streams setup.",input_count);
+    
   } while(0);
   
   LOG_EXIT;
