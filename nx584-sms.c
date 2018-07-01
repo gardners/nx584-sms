@@ -143,7 +143,95 @@ int open_input(char *in)
   return retVal;
 }
 
-int parse_textcommand(int fd,char *line,char *out)
+#define MAX_USERS 256
+char *users[MAX_USERS];
+int is_admin[MAX_USERS];
+int user_count=0;
+
+int save_user_list(void)
+{
+  return 0;
+}
+
+int load_user_list(void)
+{
+  return 0;
+}
+
+int is_admin_or_local(char *phone_number_or_null)
+{
+  if (!phone_number_or_null) return 1;
+  for(int i=0;i<user_count;i++) {
+    if (!strcmp(users[i],phone_number_or_null))
+      if (is_admin[i]) return 1;
+  }
+  return 0;
+}
+
+int is_authorised(char *phone_number_or_null)
+{
+  if (!phone_number_or_null) return 1;
+  for(int i=0;i<user_count;i++) {
+    if (!strcmp(users[i],phone_number_or_null))
+      return 1;
+  }
+  return 0;
+}
+
+
+int add_user(char *phone_number,char *out)
+{
+  if (is_authorised(phone_number)) {
+    snprintf(out,1024,"%s is already authorised.",phone_number);
+    return 0;
+  }
+  if (user_count>=MAX_USERS) {
+    snprintf(out,1024,"Too many users. Delete one or more and try again.");
+    return -1;
+  }
+  users[user_count]=strdup(phone_number);
+  is_admin[user_count++]=0;
+  save_user_list();
+  
+  return 0;
+}
+
+int add_admin(char *phone_number,char *out)
+{
+  if (is_authorised(phone_number)) {
+    snprintf(out,1024,"%s is already authorised. Delete and re-add as admin.",phone_number);
+    return 0;
+  }
+  if (user_count>=MAX_USERS) {
+    snprintf(out,1024,"Too many users. Delete one or more and try again.");
+    return -1;
+  }
+  users[user_count]=strdup(phone_number);
+  is_admin[user_count++]=1;
+  save_user_list();
+  
+  return 0;
+}
+
+int del_user(char *phone_number,char *out)
+{
+  if (!is_authorised(phone_number)) {
+    snprintf(out,1024,"%s was not authorised. Nothing to do.",phone_number);
+    return -1;
+  }
+  int index=-1;
+  for(index=0;index<user_count;index++)
+    if (!strcmp(phone_number,users[index])) break;
+  free(users[index]); users[index]=NULL;
+  for(int i=index;i<(user_count-1);i++) {
+    users[i]=users[i+1];
+    is_admin[i]=is_admin[i+1];
+  }
+  snprintf(out,1024,"Removed %s",phone_number);
+  return 0;
+}
+
+int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
 {
   int retVal=-1;
   LOG_ENTRY;
@@ -156,13 +244,44 @@ int parse_textcommand(int fd,char *line,char *out)
       snprintf(out,8192,"Valid commands:\n"
 	       "    arm - arm alarm\n"
 	       " disarm - disarm alarm\n"
-	       " armed? - indicate if alarm armed or not\n"
 	       " status - list faulted zones, and if alarm is armed\n"
+	       " add <phone number> - add phone number to list of authorised users.\n"
+	       " admin <phone number> - add phone number to list of authorised users, with the ability to add and delete others\n"
+	       " del <phone number> - delete phone number from list of authorised users.\n"
+	       " list - list authorised numbers.\n"
 	       );
       retVal=0;
       break;
     }
-    if (!strcmp(line,"disarm")) {
+    if (is_admin_or_local(phone_number_or_local)&&(!strncmp(line,"add ",4))) {
+      add_user(&line[4],out);
+      retVal=0;
+      break;
+    }    
+    if (is_admin_or_local(phone_number_or_local)&&(!strncmp(line,"admin ",6))) {
+      add_admin(&line[6],out);
+      retVal=0;
+      break;
+    }
+    if (is_admin_or_local(phone_number_or_local)&&(!strncmp(line,"del ",4))) {
+      del_user(&line[4],out);
+      retVal=0;
+      break;
+    }
+    if (is_admin_or_local(phone_number_or_local)&&(!strcmp(line,"list"))) {
+      out[0]=0;
+      snprintf(out,8192,"Administrators: ");
+      for(int i=0;i<user_count;i++)
+	if (is_admin[i]) snprintf(&out[strlen(out)],8192-strlen(out)," %s",users[i]);
+      snprintf(&out[strlen(out)],8192-strlen(out),".\n\nUsers: ");      
+      for(int i=0;i<user_count;i++)
+	if (!is_admin[i]) snprintf(&out[strlen(out)],8192-strlen(out)," %s",users[i]);
+      snprintf(&out[strlen(out)],8192-strlen(out),".\n");      
+      retVal=0;
+      break;
+    }
+
+    if (is_authorised(phone_number_or_local)&&(!strcmp(line,"disarm"))) {
       char cmd[1024];
       snprintf(cmd,1024,DISARM_COMMAND,nx584_client,master_pin);
       LOG_NOTE("Executing '%s'",cmd);
@@ -172,7 +291,7 @@ int parse_textcommand(int fd,char *line,char *out)
       retVal=0;
       break;
     }
-    if (!strcmp(line,"arm")) {
+    if (is_authorised(phone_number_or_local)&&(!strcmp(line,"arm"))) {
       char cmd[1024];
       snprintf(cmd,1024,ARM_COMMAND,nx584_client,master_pin);
       LOG_NOTE("Executing '%s'",cmd);
@@ -182,7 +301,7 @@ int parse_textcommand(int fd,char *line,char *out)
       retVal=0;
       break;
     }
-    if (!strcmp(line,"status")) {
+    if (is_authorised(phone_number_or_local)&&(!strcmp(line,"status"))) {
       switch (armedP) {
       case 0:
 	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed\n");
@@ -320,7 +439,8 @@ int parse_line(char *filename,int fd,char *line)
     // Check if it is a recognised command typed directly in as input
     // (e.g., from stdin).  If so, treat this input as text command interface,
     // and echo output directly back.
-    if (!parse_textcommand(fd,line,out)) {
+    // Mark line as fed from local interface, and therefore with admin powers
+    if (!parse_textcommand(fd,line,out,NULL)) {
       write_all(fd,out,strlen(out));
       write_all(fd,"\r\n",2);
       retVal=IT_TEXTCOMMANDS;
