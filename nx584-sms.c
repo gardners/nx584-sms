@@ -254,12 +254,27 @@ int add_admin(char *phone_number,char *out)
   return 0;
 }
 
-int del_user(char *phone_number,char *out)
+int del_user(char *phone_number,char *out,char *phone_number_or_null)
 {
   if (!is_authorised(phone_number)) {
     snprintf(out,1024,"%s was not authorised. Nothing to do.",phone_number);
     return -1;
   }
+  if (!strcmp(phone_number,phone_number_or_null)) {
+    snprintf(out,1024,"You can't remove yourself as admin user via SMS");
+    return -1;
+  }
+  if (phone_number_or_null) {
+    int admin_count=0;
+    for(int i=0;i<user_count;i++) if (is_admin[i]) admin_count++;
+    if ((admin_count==1)&&is_admin_or_local(phone_number))
+      {
+	// Can't delete last admin, except from command line interface
+	snprintf(out,1024,"You can't remove the last admin user via SMS");
+	return -1;
+      }
+  }
+  
   int index=-1;
   for(index=0;index<user_count;index++)
     if (!strcmp(phone_number,users[index])) break;
@@ -305,7 +320,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       break;
     }
     if (is_admin_or_local(phone_number_or_local)&&(!strncmp(line,"del ",4))) {
-      del_user(&line[4],out);
+      del_user(&line[4],out,phone_number_or_local);
       retVal=0;
       break;
     }
