@@ -148,13 +148,54 @@ char *users[MAX_USERS];
 int is_admin[MAX_USERS];
 int user_count=0;
 
+char config_file[1024]="/usr/local/etc/nx584-sms.conf";
+
 int save_user_list(void)
 {
+  FILE *f=fopen(config_file,"w");
+  if (f) {
+    LOG_ERROR("Could not open config file '%s' for writing",config_file);
+    perror("fopen");
+    return -1;
+  }
+
+  for(int i=0;i<user_count;i++) {
+    if (is_admin[i])
+      fprintf(f,"admin %s\n",users[i]);
+    else
+      fprintf(f,"user %s\n",users[i]);
+  }
+  
+  fclose(f);
+  
   return 0;
 }
 
 int load_user_list(void)
 {
+  FILE *f=fopen(config_file,"r");
+  if (!f) return -1;
+
+  for(int i=0;i<user_count;i++) if (users[i]) free(users[i]);
+  user_count=0;
+  
+  char line[1024];
+  char user[1024];
+
+  line[0]=0; fgets(line,1024,f);
+  while (line[0]) {
+    if (sscanf(line,"user %s",user)==1) {
+      users[user_count]=strdup(user);
+      is_admin[user_count++]=0;
+    } else if (sscanf(line,"admin %s",user)==1) {
+      users[user_count]=strdup(user);
+      is_admin[user_count++]=1;
+    } else
+      LOG_ERROR("Unrecognised line in config file: '%s'",line);
+    line[0]=0; fgets(line,1024,f);
+  }
+  fclose(f);
+  
   return 0;
 }
 
@@ -485,9 +526,11 @@ int main(int argc,char **argv)
       }
 
       // Allow nx584_client and master pins to be configured
-      int f=sscanf(argv[i],"nx584_client=%s",&nx584_client);
+      int f=sscanf(argv[i],"nx584_client=%s",nx584_client);
       if (f==1) continue;
-      f=sscanf(argv[i],"master=%s",&master_pin);
+      f=sscanf(argv[i],"master=%s",master_pin);
+      if (f==1) continue;            
+      f=sscanf(argv[i],"conf=%s",config_file);
       if (f==1) continue;            
       
       int fd=open_input(argv[i]);
@@ -504,6 +547,9 @@ int main(int argc,char **argv)
 
     LOG_NOTE("%d input streams setup.",input_count);
 
+    load_user_list();
+    LOG_NOTE("%d users registered.",user_count);
+    
     fprintf(stderr,
 	    "NX584 SMS gateway running.\n"
 	    "\n"
