@@ -230,6 +230,13 @@ int add_user(char *phone_number,char *out)
   users[user_count]=strdup(phone_number);
   is_admin[user_count++]=0;
   save_user_list();
+  snprintf(out,1024,"Added %s to list of authorised users.",phone_number);
+
+  // Send SMS to added user telling them that they have been added
+  char cmd[8192];
+  snprintf(cmd,8192,"LANG=C gammu sendsms TEXT %s -text \"You are now authorised to remotely control the alarm.  Reply HELP for more information.\"",phone_number);
+  printf("[%s]\n",cmd);
+  system(cmd);  
   
   return 0;
 }
@@ -247,6 +254,12 @@ int add_admin(char *phone_number,char *out)
   users[user_count]=strdup(phone_number);
   is_admin[user_count++]=1;
   save_user_list();
+  snprintf(out,1024,"Added %s to list of administrators.",phone_number);
+
+  char cmd[8192];
+  snprintf(cmd,8192,"LANG=C gammu sendsms TEXT %s -text \"You are now authorised to remotely control and administer the alarm.  With great power comes great responsibility. Reply HELP for more information.\"",phone_number);
+  printf("[%s]\n",cmd);
+  system(cmd);  
   
   return 0;
 }
@@ -293,7 +306,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
 
     int out_len=0;
     
-    if (!strcmp(line,"help")) {
+    if (!strcasecmp(line,"help")) {
       snprintf(out,8192,"Valid commands:\n"
 	       "    arm - arm alarm\n"
 	       " disarm - disarm alarm\n"
@@ -306,22 +319,22 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       retVal=0;
       break;
     }
-    if (is_admin_or_local(phone_number_or_local)&&(!strncmp(line,"add ",4))) {
+    if (is_admin_or_local(phone_number_or_local)&&(!strncasecmp(line,"add ",4))) {
       add_user(&line[4],out);
       retVal=0;
       break;
     }    
-    if (is_admin_or_local(phone_number_or_local)&&(!strncmp(line,"admin ",6))) {
+    if (is_admin_or_local(phone_number_or_local)&&(!strncasecmp(line,"admin ",6))) {
       add_admin(&line[6],out);
       retVal=0;
       break;
     }
-    if (is_admin_or_local(phone_number_or_local)&&(!strncmp(line,"del ",4))) {
+    if (is_admin_or_local(phone_number_or_local)&&(!strncasecmp(line,"del ",4))) {
       del_user(&line[4],out,phone_number_or_local);
       retVal=0;
       break;
     }
-    if (is_admin_or_local(phone_number_or_local)&&(!strcmp(line,"list"))) {
+    if (is_admin_or_local(phone_number_or_local)&&(!strcasecmp(line,"list"))) {
       out[0]=0;
       snprintf(out,8192,"Administrators: ");
       for(int i=0;i<user_count;i++)
@@ -334,7 +347,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       break;
     }
 
-    if (is_authorised(phone_number_or_local)&&(!strcmp(line,"disarm"))) {
+    if (is_authorised(phone_number_or_local)&&(!strcasecmp(line,"disarm"))) {
       char cmd[1024];
       snprintf(cmd,1024,DISARM_COMMAND,nx584_client,master_pin);
       LOG_NOTE("Executing '%s'",cmd);
@@ -344,7 +357,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       retVal=0;
       break;
     }
-    if (is_authorised(phone_number_or_local)&&(!strcmp(line,"arm"))) {
+    if (is_authorised(phone_number_or_local)&&(!strcasecmp(line,"arm"))) {
       char cmd[1024];
       snprintf(cmd,1024,ARM_COMMAND,nx584_client,master_pin);
       LOG_NOTE("Executing '%s'",cmd);
@@ -354,7 +367,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       retVal=0;
       break;
     }
-    if (is_authorised(phone_number_or_local)&&(!strcmp(line,"status"))) {
+    if (is_authorised(phone_number_or_local)&&(!strcasecmp(line,"status"))) {
       switch (armedP) {
       case 0:
 	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed\n");
@@ -387,7 +400,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       if (!faults) {
 	snprintf(&out[out_len],8192-out_len,"No zones have faults.\n"); out_len=strlen(out);
       } else if (faults==1) {
-	
+	// XXX - Allow providing names for zones
 	snprintf(&out[out_len],8192-out_len,"Zone FAULT in zone #%d\n",faultZone);
 	out_len=strlen(out);	
       } else {
@@ -396,6 +409,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
 	for(int i=0;i<MAX_ZONES;i++)
 	  {
 	    if (zoneStates[i]==ZS_FAULT) {
+	      // XXX - Allow providing names for zones
 	      snprintf(&out[out_len],8192-out_len," #%d",i);
 	      out_len=strlen(out);
 	    }
@@ -630,7 +644,9 @@ int main(int argc,char **argv)
 
 	      // Run instruction
 	      if (is_authorised(sender)) {
-		parse_line(sender,-1,line);
+		while(line[0]&&line[strlen(line)-1]=='\n') line[strlen(line)-1]=0;
+		if (line[0])
+		  parse_line(sender,-1,line);
 	      } else {
 		printf("'%s' is not authorised to use this service.\n",sender);
 	      }
