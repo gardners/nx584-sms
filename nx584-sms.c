@@ -1,19 +1,15 @@
 /*
 
   NX584 modem interface to SMS controller  
-  (C) Copyright Paul Gardner-Stephen 2018
+  (C) Copyright Paul Gardner-Stephen 2018-2019
 
   The idea of this software is to monitor an alarm and SMS interface,
   so that a registered group of users can be notified if the alarm goes
   off, and also so that they can arm and disarm it via their phones, as
   well as enquire the current state.
 
-  For now, it will listen to the cellular modem SMS interface for commands,
-  and periodically run the nx584_client command to find out the state of
-  the alarm.  It might also end up monitoring the output of nx584_server as
-  a more synchonous means of monitoring the alarm, and getting more status 
-  changes.
-
+  The SMS interface is implemented by using the gammu tools for Linux
+  to both send and receive SMS messages.
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -40,6 +36,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
+#include <time.h>
 #include "code_instrumentation.h"
 
 
@@ -153,7 +150,7 @@ char config_file[1024]="/usr/local/etc/nx584-sms.conf";
 int save_user_list(void)
 {
   FILE *f=fopen(config_file,"w");
-  if (f) {
+  if (!f) {
     LOG_ERROR("Could not open config file '%s' for writing",config_file);
     perror("fopen");
     return -1;
@@ -417,7 +414,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
   return retVal;
 }
 
-int parse_line(char *filename,int fd,char *line)
+int parse_line(char *origin,int fd,char *line)
 {
   int retVal=IT_UNKNOWN;
   LOG_ENTRY;
@@ -496,9 +493,22 @@ int parse_line(char *filename,int fd,char *line)
     // (e.g., from stdin).  If so, treat this input as text command interface,
     // and echo output directly back.
     // Mark line as fed from local interface, and therefore with admin powers
-    if (!parse_textcommand(fd,line,out,NULL)) {
+    if (!parse_textcommand(fd,line,out,
+			   // Pass origin as phone number if it isn't indicating stdin
+			   ((!origin)||(!strcmp(origin,"-")))?NULL:origin
+			   )) {
       write_all(fd,out,strlen(out));
       write_all(fd,"\r\n",2);
+
+      if (origin&&strcmp(origin,"-")) {
+	// Send reply back by SMS
+	char cmd[8192];
+	snprintf(cmd,8192,"LANG=C gammu sendsms TEXT %s -text \"%s\"",
+		 origin,out);
+	printf("[%s]\n",cmd);
+	system(cmd);
+      }
+      
       retVal=IT_TEXTCOMMANDS;
       break;
     }
@@ -513,17 +523,21 @@ int parse_line(char *filename,int fd,char *line)
   return retVal;
 }
 
+time_t last_sms_check_time=0;
+
 int main(int argc,char **argv)
 {
   /* We have one or more files/devices to open.
      Each may be one of:
      1. nx584_server output
-     2. serial port to modem
 
      We auto-detect which is which, to make user life easy, especially
      since usb-serial adapters by default tend to not have reliable device binding
      by default.  Since the messages from each are quite distinct, this isn't a big
      problem to do.
+
+     UPDATE: By using gammu for SMS, we can avoid much of this problem space.
+
   */
 
   int retVal=0;
@@ -591,6 +605,29 @@ int main(int argc,char **argv)
 	}
        }
       if (!events) usleep(10000);
+
+      // Check for new messages
+      if (last_sms_check_time<time(0)) {
+
+	printf("Getting SMS...\n");
+	unlink("/tmp/nx584-sms.txt");
+	system("LANG=C gammu getallsms >/tmp/nx584-sms.txt");
+
+	FILE *f=fopen("/tmp/nx584-sms.txt","r");
+	if (f) {
+	  char line[1024];
+	  line[0]=0; fgets(line,1024,f);
+	  while(line[0]) {
+	    printf("line>> %s\n",line);
+	    line[0]=0; fgets(line,1024,f);
+	  }
+	  
+	  fclose(f);
+	}
+	
+	last_sms_check_time=time(0);
+      }
+      
     }
     
   } while(0);
