@@ -219,6 +219,11 @@ int is_authorised(char *phone_number_or_null)
 
 int add_user(char *phone_number,char *out)
 {
+  if (phone_number[0]!='+') {
+    snprintf(out,1024,"Telephone numbers must be in international format, e.g., +614567898901234567");
+    return 1;
+  }
+    
   if (is_authorised(phone_number)) {
     snprintf(out,1024,"%s is already authorised.",phone_number);
     return 0;
@@ -243,6 +248,10 @@ int add_user(char *phone_number,char *out)
 
 int add_admin(char *phone_number,char *out)
 {
+  if (phone_number[0]!='+') {
+    snprintf(out,1024,"Telephone numbers must be in international format, e.g., +614567898901234567");
+    return 1;
+  }
   if (is_authorised(phone_number)) {
     snprintf(out,1024,"%s is already authorised. Delete and re-add as admin.",phone_number);
     return 0;
