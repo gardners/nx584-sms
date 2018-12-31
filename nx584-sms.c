@@ -497,8 +497,10 @@ int parse_line(char *origin,int fd,char *line)
 			   // Pass origin as phone number if it isn't indicating stdin
 			   ((!origin)||(!strcmp(origin,"-")))?NULL:origin
 			   )) {
-      write_all(fd,out,strlen(out));
-      write_all(fd,"\r\n",2);
+      if (fd>-1) {
+	write_all(fd,out,strlen(out));
+	write_all(fd,"\r\n",2);
+      }
 
       if (origin&&strcmp(origin,"-")) {
 	// Send reply back by SMS
@@ -615,10 +617,38 @@ int main(int argc,char **argv)
 
 	FILE *f=fopen("/tmp/nx584-sms.txt","r");
 	if (f) {
+	  char sender[1024];
+	  char location[1024]="";
+	  int isSMS=0;
+	  int gotSender=0;
 	  char line[1024];
 	  line[0]=0; fgets(line,1024,f);
 	  while(line[0]) {
-	    printf("line>> %s\n",line);
+	    //	    printf("line>> %s\n",line);
+	    if (isSMS==1&&gotSender) {
+	      printf("SMS message #%s from '%s' is '%s'\n",location,sender,line);
+
+	      // Run instruction
+	      if (is_authorised(sender)) {
+		parse_line(sender,-1,line);
+	      } else {
+		printf("'%s' is not authorised to use this service.\n",sender);
+	      }
+	      
+	      // Delete SMS message
+	      char cmd[8192];
+	      snprintf(cmd,8192,"LANG=C gammu deletesms 0 %s",location);
+	      system(cmd);	      
+	      
+	      isSMS=0; gotSender=0; location[0]=0;
+	    } else {
+	      sscanf(line,"Location %[^,]",location);
+	      if (!strncmp("SMS message",line,11)) { isSMS=2; gotSender=0; }
+	      if (sscanf(line,"Remote number%*[ ]: \"%[^\"]\"",sender)==1) gotSender=1;
+	      if (!strcmp("\n",line)) if (isSMS) isSMS--;
+	      if (!isSMS) gotSender=0;
+	    }
+	    
 	    line[0]=0; fgets(line,1024,f);
 	  }
 	  
