@@ -4,7 +4,12 @@ make
 # Install it
 sudo cp nx584-sms /usr/local/bin
 # download pynx584
-( cd .. ; git clone https://github.com/kk7ds/pynx584.git )
+( cd .. ; git clone https://github.com/kk7ds/pynx584.git  )
+# Patch pynx584 to log when run from an init.d script:
+   Just before the line LOG = logging.getLogger() add the following two lines:
+   logging.basicConfig()
+   LOG_FORMAT = '%(asctime)-15s %(module)s r%$(levelname)s %(message)s'
+
 # Install some dependencies
 sudo apt-get install gammu wammu
 sudo pip install stevedore
