@@ -71,6 +71,9 @@ int armedP=-1;
 #define ZS_FAULT 2
 int zoneStates[MAX_ZONES];
 
+time_t siren_on_time=0;
+int significant_event=0;
+
 int open_input(char *in)
 {
   int retVal=-1;
@@ -306,6 +309,60 @@ int del_user(char *phone_number,char *out,char *phone_number_or_null)
   return 0;
 }
 
+void generate_status_message(char *out,int *out_len,int max_len)
+{
+  switch (armedP) {
+  case 0:
+    snprintf(&out[*out_len],max_len-*out_len,"Alarm is NOT armed\n");
+    break;
+  case 1:
+    snprintf(&out[*out_len],max_len-*out_len,"Alarm IS armed.\n");
+    break;
+  default:
+    snprintf(&out[*out_len],max_len-*out_len,"Alarm state unknown (arm or disarm to be sure).\n");
+  }
+  *out_len=strlen(out);
+  switch (siren) {
+  case 1:
+    snprintf(&out[*out_len],max_len-*out_len,"Siren IS sounding.\n");
+    break;
+  case 0:
+    snprintf(&out[*out_len],max_len-*out_len,"Siren is OFF.\n");
+    break;
+  default:
+    snprintf(&out[*out_len],max_len-*out_len,"I don't know if the siren is on or off.\n");
+  }
+  *out_len=strlen(out);
+  // XXX - Work out how many zones we have
+  int faults=0;
+  int faultZone=-1;
+  for(int i=0;i<MAX_ZONES;i++)
+    {
+      if (zoneStates[i]==ZS_FAULT) { faults++; faultZone=i; }	  
+    }
+  if (!faults) {
+    snprintf(&out[*out_len],max_len-*out_len,"No zones have faults.\n"); *out_len=strlen(out);
+  } else if (faults==1) {
+    // XXX - Allow providing names for zones
+    snprintf(&out[*out_len],max_len-*out_len,"Zone FAULT in zone #%d\n",faultZone);
+    *out_len=strlen(out);	
+  } else {
+    snprintf(&out[*out_len],max_len-*out_len,"The following zones have faults: ");
+    *out_len=strlen(out);
+    for(int i=0;i<MAX_ZONES;i++)
+      {
+	if (zoneStates[i]==ZS_FAULT) {
+	  // XXX - Allow providing names for zones
+	  snprintf(&out[*out_len],max_len-*out_len," #%d",i);
+	  *out_len=strlen(out);
+	}
+	
+      }
+    snprintf(&out[*out_len],max_len-*out_len,"\n");
+    *out_len=strlen(out);	
+  }      
+}
+
 int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
 {
   int retVal=-1;
@@ -377,56 +434,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       break;
     }
     if (is_authorised(phone_number_or_local)&&(!strcasecmp(line,"status"))) {
-      switch (armedP) {
-      case 0:
-	snprintf(&out[out_len],8192-out_len,"Alarm is NOT armed\n");
-	break;
-      case 1:
-	snprintf(&out[out_len],8192-out_len,"Alarm IS armed.\n");
-	break;
-      default:
-	snprintf(&out[out_len],8192-out_len,"Alarm state unknown (arm or disarm to be sure).\n");
-      }
-      out_len=strlen(out);
-      switch (siren) {
-      case 1:
-	snprintf(&out[out_len],8192-out_len,"Siren IS sounding.\n");
-	break;
-      case 0:
-	snprintf(&out[out_len],8192-out_len,"Siren is OFF.\n");
-	break;
-      default:
-	snprintf(&out[out_len],8192-out_len,"I don't know if the siren is on or off.\n");
-      }
-      out_len=strlen(out);
-      // XXX - Work out how many zones we have
-      int faults=0;
-      int faultZone=-1;
-      for(int i=0;i<MAX_ZONES;i++)
-	{
-	  if (zoneStates[i]==ZS_FAULT) { faults++; faultZone=i; }	  
-	}
-      if (!faults) {
-	snprintf(&out[out_len],8192-out_len,"No zones have faults.\n"); out_len=strlen(out);
-      } else if (faults==1) {
-	// XXX - Allow providing names for zones
-	snprintf(&out[out_len],8192-out_len,"Zone FAULT in zone #%d\n",faultZone);
-	out_len=strlen(out);	
-      } else {
-	snprintf(&out[out_len],8192-out_len,"The following zones have faults: ");
-	out_len=strlen(out);
-	for(int i=0;i<MAX_ZONES;i++)
-	  {
-	    if (zoneStates[i]==ZS_FAULT) {
-	      // XXX - Allow providing names for zones
-	      snprintf(&out[out_len],8192-out_len," #%d",i);
-	      out_len=strlen(out);
-	    }
-	    
-	  }
-	snprintf(&out[out_len],8192-out_len,"\n");
-	out_len=strlen(out);	
-      }      
+      generate_status_message(out,&out_len,8192);
       
       retVal=0;
       break;
@@ -504,13 +512,16 @@ int parse_line(char *origin,int fd,char *line)
     if ((strstr(line,"controller INFO System de-asserts Global Siren on"))
 	||(strstr(line,"INFO:controller:System de-asserts Global Siren on")))
       {
+	significant_event++;
 	siren=0;
+	siren_on_time=0;
 	retVal=IT_NX584SERVERLOG;
 	break;
       }
     if ((strstr(line,"controller INFO System asserts Global Siren on"))
 	||(strstr(line,"INFO:controller:System asserts Global Siren on")))
       {
+	siren_on_time=time(0);
 	siren=1;
 	retVal=IT_NX584SERVERLOG;
 	break;
@@ -642,6 +653,32 @@ int main(int argc,char **argv)
        }
       if (!events) usleep(10000);
 
+      // Trigger a significant event if the siren has been on more than 10 seconds
+      // (this is to avoid triggering a broadcast alert when the siren briefly sounds
+      //  during remote arming/disarming).
+      if (siren_on_time&&((time(0)-siren_on_time)>=10)) {
+	significant_event=1;
+	siren_on_time=0;
+      }
+      if (significant_event) {
+	significant_event=0;
+
+	int out_len=0;
+	char out[8192];
+	sprintf(out,"UNEXPECTED ALARM ACTIVITY: ");
+	out_len=strlen(out);
+	generate_status_message(out,&out_len,8192);
+	
+	for(int i=0;i<user_count;i++) {
+	  // Send SMS to added user telling them that they have been added
+	  char cmd[8192];
+	  snprintf(cmd,8192,"LANG=C gammu sendsms TEXT %s -text \"%s. You and %d other(s) have been sent this message. Reply with help for a reminder of commands.\"",users[i],out,user_count-1);
+	printf("[%s]\n",cmd);
+	system(cmd);  
+	
+	}
+      }
+      
       // Check for new messages
       if (last_sms_check_time<time(0)) {
 
