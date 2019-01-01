@@ -14,8 +14,8 @@ NAME=alarm-monitor
 
 do_start()
 {
-	start-stop-daemon --start --exec /home/pi/pynx584/nx584_server
-	start-stop-daemon --start --exec /usr/local/bin/nx584-sms
+	start-stop-daemon --start -b --exec "/home/pi/pynx584/nx584_server" ">" /home/pi/nxalarm.log
+	start-stop-daemon --start -b --exec /usr/local/bin/nx584-sms -- /home/pi/nxalarm.log master=9999 nx584_client=/home/pi/pynx584/nx584_client 
 }
 
 do_stop()
@@ -23,3 +23,31 @@ do_stop()
 	start-stop-daemon --stop --exec /home/pi/pynx584/nx584_server
 	start-stop-daemon --stop --exec /usr/local/bin/nx584-sms
 }
+
+case "$1" in
+    start)
+	log_daemon_msg "Starting $DESC"
+	do_start
+	case "$?" in
+	    0) sendsigs_omit
+	       log_end_msg 0 ;;
+	    1) log_progress_msg "already started"
+	       log_end_msg 0 ;;
+	    *) log_end_msg 1 ;;
+	esac
+
+	;;
+
+    stop)
+	log_daemon_msg "Stopping $DESC"
+	do_start
+	case "$?" in
+	    0) sendsigs_omit
+	       log_end_msg 0 ;;
+	    1) log_progress_msg "already stopped"
+	       log_end_msg 0 ;;
+	    *) log_end_msg 1 ;;
+	esac
+
+	;;
+esac
