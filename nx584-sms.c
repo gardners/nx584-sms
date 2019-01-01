@@ -512,7 +512,7 @@ int parse_line(char *origin,int fd,char *line)
     if ((strstr(line,"controller INFO System de-asserts Global Siren on"))
 	||(strstr(line,"INFO:controller:System de-asserts Global Siren on")))
       {
-	significant_event++;
+	if (!siren_on_time) significant_event++;
 	siren=0;
 	siren_on_time=0;
 	retVal=IT_NX584SERVERLOG;
