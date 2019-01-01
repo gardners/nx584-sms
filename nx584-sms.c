@@ -449,13 +449,17 @@ int parse_line(char *origin,int fd,char *line)
     
   do {
 
-    // Allow either , or . as decimal character
+    // Allow either , or . as decimal character, and also standard python format
     int f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Zone %d (%*[^)]) state is %s",
 		 &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
     if (f<9)
       f=sscanf(line,"%d-%d-%d %d:%d:%d.%d controller INFO Zone %d (%*[^)]) state is %s",
 	       &year,&month,&day,&hour,&min,&sec,&msec,&zoneNum,zone_state);
-      
+    if (f<9) {
+      f=sscanf(line,"INFO:controller:Zone %d (%*[^)]) state is %s",
+	       &zoneNum,zone_state);
+      if (f==2) f=9;
+    }      
     if (f==9) {
       LOG_NOTE("Saw controller state message: Zone %d is now '%s'",zoneNum,zone_state);
       if (zoneNum>=0&&zoneNum<MAX_ZONES) {
@@ -479,6 +483,11 @@ int parse_line(char *origin,int fd,char *line)
 	     &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
     if (f<9) f=sscanf(line,"%d-%d-%d %d:%d:%d,%d controller INFO Partition %d%*[ ]%[^\n\r]",
 		      &year,&month,&day,&hour,&min,&sec,&msec,&partNum,part_state);
+    if (f<9) {
+      f=sscanf(line,"INFO:controller:Partition %d%*[ ]%[^\n\r]",
+	       &partNum,part_state);
+      if (f==2) f=9;
+    }
     if (f==9) {
       if (partNum==1&&(!strcmp(part_state,"armed"))) {
 	armedP=1;
@@ -492,13 +501,15 @@ int parse_line(char *origin,int fd,char *line)
       break;
     }
 
-    if (strstr(line,"controller INFO System de-asserts Global Siren on"))
+    if ((strstr(line,"controller INFO System de-asserts Global Siren on"))
+	||(strstr(line,"INFO:controller:System de-asserts Global Siren on")))
       {
 	siren=0;
 	retVal=IT_NX584SERVERLOG;
 	break;
       }
-    if (strstr(line,"controller INFO System asserts Global Siren on"))
+    if ((strstr(line,"controller INFO System asserts Global Siren on"))
+	||(strstr(line,"INFO:controller:System asserts Global Siren on")))
       {
 	siren=1;
 	retVal=IT_NX584SERVERLOG;
