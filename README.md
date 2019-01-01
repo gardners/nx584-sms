@@ -1,3 +1,19 @@
+### NX/Hills Home/Commercial alarm remote monitoring and control system
+
+For many owners of these alarms, there is no need to have a commercial remote monitoring
+company involved: It just costs money.  We also have reservations about the security of
+the internet-based phone-app for remote monitoring and control.  Thus we have made this
+simple SMS-based system. It was originally designed for a church, where it made sense 
+for the church community to collectively provide the alarm monitoring, but it could easily
+work in many other contexts.
+
+It works using an NX584 home automation board with serial port.  You then install this
+software on something like a Raspberry Pi, connect it to the NX584, and add in a cellular
+modem that is supported by gammu.  This gives SMS capability, and this software monitors
+the log from the pynx584 open-source program that talks to the NX584, and issues instructions
+to the modem, as well as alarting via SMS whenever something happens.
+
+
 To use this software, you will need:
 
 1. Install https://github.com/kk7ds/pynx584.git
