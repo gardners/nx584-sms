@@ -1,0 +1,25 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides: nx-alarm-monitor
+# Default-Start:	2 3 4 5
+# Default-Stop:		0 1 6
+# Short-Description:	Start NX alarm remote monitoring and control system
+### END INIT INFFO
+
+PATH=/usr/bin:/bin:/sbin:/usr/sbin
+DESC="NX Alarm remote monitoring and control"
+NAME=alarm-monitor
+
+. /lib/lsb/init-functions
+
+do_start()
+{
+	start-stop-daemon --start --exec /home/pi/pynx584/nx584_server
+	start-stop-daemon --start --exec /usr/local/bin/nx584-sms
+}
+
+do_stop()
+{
+	start-stop-daemon --stop --exec /home/pi/pynx584/nx584_server
+	start-stop-daemon --stop --exec /usr/local/bin/nx584-sms
+}
