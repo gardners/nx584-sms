@@ -14,14 +14,14 @@ NAME=alarm-monitor
 
 do_start()
 {
-	start-stop-daemon --start -b --exec "/home/pi/pynx584/nx584_server" -- --serial /dev/serial/by-id/REPLACE-THIS-WITH-CORRECT-THING ">" /home/pi/nxalarm.log
-	start-stop-daemon --start -b --exec /usr/local/bin/nx584-sms -- /home/pi/nxalarm.log master=9999 nx584_client=/home/pi/pynx584/nx584_client 
+	start-stop-daemon --start -b --make-pidfile --pidfile /var/run/nx584_server --startas /bin/bash -- -c "exec stdbuf -oL -eL /home/pi/pynx584/nx584_server --serial /dev/serial/by-id/REPLACE-THIS-WITH-CORRECT-THING >/home/pi/nxalarm.log 2>&1"
+	start-stop-daemon --start -b --make-pidfile --pidfile /var/run/nx584-sms --exec /usr/local/bin/nx584-sms -- /home/pi/nxalarm.log master=9999 nx584_client=/home/pi/pynx584/nx584_client 
 }
 
 do_stop()
 {
-	start-stop-daemon --stop --exec /home/pi/pynx584/nx584_server
-	start-stop-daemon --stop --exec /usr/local/bin/nx584-sms
+	start-stop-daemon --stop --pidfile /var/run/nx584_server --exec /home/pi/pynx584/nx584_server
+	start-stop-daemon --stop --pidfile /var/run/nx584-sms --exec /usr/local/bin/nx584-sms
 }
 
 case "$1" in
