@@ -377,8 +377,22 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
 	       "    arm - arm alarm\n"
 	       " disarm - disarm alarm\n"
 	       " status - list faulted zones, and if alarm is armed\n"
+	       " help2 - more help.\n"
+	       );
+      retVal=0;
+      break;
+    }
+    if (!strcasecmp(line,"help2")) {
+      snprintf(out,8192,"Valid commands:\n"
 	       " add <phone number> - add phone number to list of authorised users.\n"
 	       " admin <phone number> - add phone number to list of authorised users, with the ability to add and delete others\n"
+	       " help3 - even more help.\n"
+	       );
+      retVal=0;
+      break;
+    }
+    if (!strcasecmp(line,"help3")) {
+      snprintf(out,8192,"Valid commands:\n"
 	       " del <phone number> - delete phone number from list of authorised users.\n"
 	       " list - list authorised numbers.\n"
 	       );
