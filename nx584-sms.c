@@ -384,9 +384,9 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
     }
     if (!strcasecmp(line,"help2")) {
       snprintf(out,8192,"Valid commands:\n"
-	       " add <phone number> - add phone number to list of authorised users.\n"
-	       " admin <phone number> - add phone number to list of authorised users, with the ability to add and delete others\n"
-	       " help3 - even more help.\n"
+	       " add <number> - add number to list of users.\n"
+	       " admin <number> - add number to list of admins, who can add and delete others\n"
+	       " help3 - more help.\n"
 	       );
       retVal=0;
       break;
@@ -552,10 +552,12 @@ int parse_line(char *origin,int fd,char *line)
     // (e.g., from stdin).  If so, treat this input as text command interface,
     // and echo output directly back.
     // Mark line as fed from local interface, and therefore with admin powers
+    fprintf(stderr,"DEBUG: Parsing SMS message '%s'\n",line); fflush(stderr);
     if (!parse_textcommand(fd,line,out,
 			   // Pass origin as phone number if it isn't indicating stdin
 			   ((!origin)||(!strcmp(origin,"-")))?NULL:origin
 			   )) {
+      fprintf(stderr,"DEBUG: Responding with '%s'\n",out); fflush(stderr);
       if (fd>-1) {
 	write_all(fd,out,strlen(out));
 	write_all(fd,"\r\n",2);
