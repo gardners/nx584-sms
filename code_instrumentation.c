@@ -18,8 +18,8 @@ void code_instrumentation_log(const char* fileName, int line, const char* functi
 		strcpy(timeBuffer, asctime(localtm));
 		*(timeBuffer + strlen(timeBuffer) - 1) = '\0';
 
-		static char formatBuffer[BUFFER_SIZE];
-		snprintf(formatBuffer, BUFFER_SIZE, "%s: %s (%d) - %s:\n  %s\n", timeBuffer, fileName, line, functionName, msg);
+		static char formatBuffer[BUFFER_SIZE*2];
+		snprintf(formatBuffer, BUFFER_SIZE*2, "%s: %s (%d) - %s:\n  %s\n", timeBuffer, fileName, line, functionName, msg);
 		va_list args;
 		va_start(args, msg);
 		vfprintf(stderr, formatBuffer, args);
