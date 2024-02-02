@@ -426,7 +426,8 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
 	system(cmd);  
 	
       }
-      out[0]=0;
+
+      snprintf(out,8192,"Your message has been sent to all %d users.\n",user_count);
       
       retVal=0;
       break;
