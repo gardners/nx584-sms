@@ -377,7 +377,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
 	       "    arm - arm alarm\n"
 	       " disarm - disarm alarm\n"
 	       " status - report alarm status\n"
-	       " say <message> - send a short message to all.\n"
+	       " say <your message> - send a short message to all.\n"
 	       " help2 - more help.\n"
 	       );
       retVal=0;
