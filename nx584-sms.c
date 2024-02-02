@@ -417,6 +417,17 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
     }
     if (is_admin_or_local(phone_number_or_local)&&(!strncasecmp(line,"say ",4))) {
       snprintf(out,8192,"%s says: %s",phone_number_or_local,&line[4]);
+
+      for(int i=0;i<user_count;i++) {
+	// Send SMS to added user telling them that they have been added
+	char cmd[10000];
+	snprintf(cmd,10000,"LANG=C gammu sendsms TEXT %s -text \"%s\"",users[i],out);
+	printf("[%s]\n",cmd);
+	system(cmd);  
+	
+      }
+      out[0]=0;
+      
       retVal=0;
       break;
     }
