@@ -395,6 +395,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       snprintf(out,8192,"Valid commands:\n"
 	       " del <phone number> - delete phone number from list of authorised users.\n"
 	       " list - list authorised numbers.\n"
+	       " say <message> - send message to all admins and users.\n"
 	       );
       retVal=0;
       break;
@@ -414,6 +415,11 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       retVal=0;
       break;
     }
+    if (is_admin_or_local(phone_number_or_local)&&(!strcasecmp(line,"say"))) {
+      snprintf(out,8192,"%s says: %s",phone_number_or_local,&line[4]);
+      retVal=0;
+      break;
+    }
     if (is_admin_or_local(phone_number_or_local)&&(!strcasecmp(line,"list"))) {
       out[0]=0;
       snprintf(out,8192,"Administrators: ");
@@ -428,8 +434,8 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
     }
 
     if (is_authorised(phone_number_or_local)&&(!strcasecmp(line,"disarm"))) {
-      char cmd[1024];
-      snprintf(cmd,1024,DISARM_COMMAND,nx584_client,master_pin);
+      char cmd[4000];
+      snprintf(cmd,4000,DISARM_COMMAND,nx584_client,master_pin);
       LOG_NOTE("Executing '%s'",cmd);
       int r=system(cmd);
       if (!r) snprintf(out,8192,"Commanded alarm to DISARM.");
@@ -438,8 +444,8 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       break;
     }
     if (is_authorised(phone_number_or_local)&&(!strcasecmp(line,"arm"))) {
-      char cmd[1024];
-      snprintf(cmd,1024,ARM_COMMAND,nx584_client,master_pin);
+      char cmd[4000];
+      snprintf(cmd,4000,ARM_COMMAND,nx584_client,master_pin);
       LOG_NOTE("Executing '%s'",cmd);
       int r=system(cmd);
       if (!r) snprintf(out,8192,"Commanded alarm to ARM.");
@@ -565,8 +571,8 @@ int parse_line(char *origin,int fd,char *line)
 
       if (origin&&strcmp(origin,"-")) {
 	// Send reply back by SMS
-	char cmd[8192];
-	snprintf(cmd,8192,"LANG=C gammu sendsms TEXT %s -text \"%s\"",
+	char cmd[10000];
+	snprintf(cmd,10000,"LANG=C gammu sendsms TEXT %s -text \"%s\"",
 		 origin,out);
 	printf("[%s]\n",cmd);
 	system(cmd);
@@ -687,8 +693,8 @@ int main(int argc,char **argv)
 	
 	for(int i=0;i<user_count;i++) {
 	  // Send SMS to added user telling them that they have been added
-	  char cmd[8192];
-	  snprintf(cmd,8192,"LANG=C gammu sendsms TEXT %s -text \"%s. You and %d other(s) have been sent this message. Reply with help for a reminder of commands.\"",users[i],out,user_count-1);
+	  char cmd[10000];
+	  snprintf(cmd,10000,"LANG=C gammu sendsms TEXT %s -text \"%s. You and %d other(s) have been sent this message. Reply with help for a reminder of commands.\"",users[i],out,user_count-1);
 	printf("[%s]\n",cmd);
 	system(cmd);  
 	
