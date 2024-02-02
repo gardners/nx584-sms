@@ -29,6 +29,19 @@ arm and disarm the alarm, and generally query it:
 EXIT Armed light goes off.
 EXIT Service LED stops blinking, READY and POWER LEDs are back on solid.
 
+If you want to disable the sounding of the alarm 
+*8   to enter programming mode. all LEDs begin to flash
+9713 to enter service mode (your code might be different). service light will flash, and function leds will be on solid.
+0#   to program control panel
+22#  to program location 22
+1-8  press digits until exaclty 1 and 6 are lit.
+*    save changes.
+1-8  press digits until exactly 8 is lit.
+*    save changes.
+*    Press * until the Armed light comes back on.
+EXIT Armed light goes off.
+EXIT Service LED stops blinking, READY and POWER LEDs are back on solid.
+
 This should be done before running the software
 
 
