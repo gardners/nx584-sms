@@ -415,7 +415,7 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       retVal=0;
       break;
     }
-    if (is_admin_or_local(phone_number_or_local)&&(!strcasecmp(line,"say"))) {
+    if (is_admin_or_local(phone_number_or_local)&&(!strncasecmp(line,"say ",4))) {
       snprintf(out,8192,"%s says: %s",phone_number_or_local,&line[4]);
       retVal=0;
       break;
