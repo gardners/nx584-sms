@@ -418,6 +418,9 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
     if (is_admin_or_local(phone_number_or_local)&&(!strncasecmp(line,"say ",4))) {
       snprintf(out,8192,"%s says: %s",phone_number_or_local,&line[4]);
 
+      // Double quotes cause trouble, so convert them to single quotes
+      for(int i=0;out[i];i++) if (out[i]=='\"') out[i]='\'';
+
       for(int i=0;i<user_count;i++) {
 	// Send SMS to added user telling them that they have been added
 	char cmd[10000];
