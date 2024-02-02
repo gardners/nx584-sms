@@ -376,7 +376,8 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       snprintf(out,8192,"Valid commands:\n"
 	       "    arm - arm alarm\n"
 	       " disarm - disarm alarm\n"
-	       " status - list faulted zones, and if alarm is armed\n"
+	       " status - report alarm status\n"
+	       " say <message> - send a short message to all.\n"
 	       " help2 - more help.\n"
 	       );
       retVal=0;
@@ -395,7 +396,6 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
       snprintf(out,8192,"Valid commands:\n"
 	       " del <phone number> - delete user from authorised user list.\n"
 	       " list - list authorised numbers.\n"
-	       " say <message> - send a short message to all.\n"
 	       );
       retVal=0;
       break;
