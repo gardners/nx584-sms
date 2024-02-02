@@ -393,9 +393,9 @@ int parse_textcommand(int fd,char *line,char *out, char *phone_number_or_local)
     }
     if (!strcasecmp(line,"help3")) {
       snprintf(out,8192,"Valid commands:\n"
-	       " del <phone number> - delete phone number from authorised user list.\n"
+	       " del <phone number> - delete user from authorised user list.\n"
 	       " list - list authorised numbers.\n"
-	       " say <message> - send message to all.\n"
+	       " say <message> - send a short message to all.\n"
 	       );
       retVal=0;
       break;
